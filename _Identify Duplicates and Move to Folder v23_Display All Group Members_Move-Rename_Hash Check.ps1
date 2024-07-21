@@ -1,135 +1,63 @@
-$sourceDir = $PSScriptRoot
-$thisDrive = (Split-Path -Path $sourceDir -Qualifier) + "\"
-$targetPath = "_Duplicates\"
-$coldStorage = "_COLD_STORAGE"
-$whereTo = $thisDrive + $targetPath
-$targetDir = $sourceDir.Replace($thisDrive,$whereTo)
+## Imports
+Import-Module .\DemoFunctions.psm1
 
-If ($sourceDir -eq $thisDrive)
-	{
-	$thisFolderName = "ROOT";
-	} else {
-	$thisFolderName = (Split-Path -Path $sourceDir -Leaf)
-	}
+## Variables
+$Script:ColumnRecall = 0
+$Script:NewLineState = $True
+$Script:LogCache = ""
+$Script:MakeOutput = $True 
+$Script:sourceDir = $PSScriptRoot
+$Script:thisDrive = (Split-Path -Path $sourceDir -Qualifier) + "\"
+$Script:targetPath = "_Duplicates\"
+$Script:coldStorage = "_COLD_STORAGE"
+$Script:whereTo = $thisDrive + $targetPath
+$Script:targetDir = $sourceDir.Replace($thisDrive, $whereTo)
+$Script:thisFolderName = ""
+$Script:SkipFileTypes = @('.ps1', '.bat')
 
-$todaysDate = Get-Date -Format "yyyy-MM-dd"
-$newFileName = "_Duplicate Identification Log_" + $thisFolderName + "_$todaysDate" + ".txt"
-$logFolder = $thisDrive + "___LOGS\"
-
-$outputFile = ($logFolder + $newFileName).Replace("\\","\")
-
-function CHECKOUTPUT
-{
-	Write-Host "Assessing if OUTPUTFILE exists, please wait..." -NoNewLine
-	if (Test-Path $outputFile) {
-		Write-Host "file found, removing existing file.`n"
-		Remove-Item $outputFile -Force -Verbose
-		} else {
-		Write-Host "file not found, delete operation aborted."
-		Write-Host "Assessing if LOGFOLDER exists, please wait..." -NoNewLine
-		If(!(test-path $logFolder))
-		{
-			Write-Host "directory not found. Creating..." -ForegroundColor Yellow -NoNewLine
-			New-Item -ItemType Directory -Force -Path $logFolder | Out-Null
-			Write-Host "directory creation successful." -ForegroundColor Cyan
-		} else {
-			Write-Host "directory found, aborting CREATEDIR." -ForegroundColor Yellow
-		}
-		Write-Host " "
-	}
+If ($sourceDir -eq $thisDrive) {
+	$Script:thisFolderName = "ROOT";
+}
+else {
+	$Script:thisFolderName = (Split-Path -Path $sourceDir -Leaf)
 }
 
-function MOVEITEM
-{
-	$fileName = $fileName = (Split-Path -Path $_.Path -Leaf)
-	$moveFrom = ((Split-Path -Parent $_.Path) + "\")
-	$moveTo = ((Split-Path -Parent $nextName) + "\").Replace("\\","\")
-	$fileBaseName = [io.path]::GetFileNameWithoutExtension($_.Path)
-	$fileExtension = [System.IO.Path]::GetExtension($_.Path)
+$newFileName = "_Duplicate Identification Log_$thisFolderName_$(Get-Date -Format "yyyyMMdd").txt"
+$Script:LogFolder = $thisDrive + "___LOGS\"
+$Script:LogFile = ($Script:LogFolder + $newFileName).Replace("\\", "\")
 
-	If(Test-Path -Path $nextName) {
-		Write-Host "TARGETFILE found, proceeding with operation GET-HASH.`n" -ForegroundColor Yellow
-		$hash1 = (Get-FileHash $_.Path).Hash
-		$hash2 = (Get-FileHash $nextName).Hash
-		Write-Host "HASH1:" -BackgroundColor DarkGreen -ForegroundColor White
-		Write-Host $hash1 -ForegroundColor Yellow
-		Write-Host "HASH2:" -BackgroundColor DarkGreen -ForegroundColor White
-		Write-Host $hash2 -ForegroundColor Yellow
-		If ($hash1 -eq $hash2) {
-			Write-Host "`nFile hashes match. Proceeding with operation REMOVE-ITEM." -BackgroundColor DarkRed -ForegroundColor White
-			$_.Path | Remove-Item -Force -Verbose
-			$fileDeleted = "y";
-			} else {
-			Write-Host "`nFile hashes don't match. Proceeding with operation RENAME-ITEM." -BackgroundColor Cyan
-			$num = 1
-				while(Test-Path -Path $nextName)
-					{
-					$nextName = Join-path $moveTo ($fileBaseName + "_$num" + $fileExtension)
-					$num += 1   
-					}
-			}
-		} else {
-		Write-Host " "
-		}
-	if ($fileDeleted -ne "y") {
-		$folderToMake = (Split-Path -Path $nextName -Parent);
-
-		If(!(test-path $folderToMake))
-		{
-			New-Item -ItemType Directory -Force -Path $folderToMake | Out-Null
-		}
-		$_.Path | Move-Item -Destination $nextName -Force -Verbose
-	}
-}
-
-function HOLDONE
-{
-	if ($makeOutput -eq "Y") {
-	$operationDescription | add-content -path $outputFile -Force
-#	Start-Sleep -Seconds 0.5
-	}
-}
-
+## Logic
 #==========================================================================================================
+Write-Message -Preamble "OPERATION:" -Message "Identify Duplicates and Move to TARGETDIR (One Original Stays in SOURCEDIR)" -BgColor DarkRed
+Write-Message -Preamble "SOURCEDIR:" -Message "'$sourceDir'" -Log $True -LogFile $Script:LogFile
+Write-Message -Preamble "TARGETDIR:" -Message "'$targetDir'"
+Write-Message -Preamble "LOGFOLDER:" -Message "'$Script:LogFolder'"
 
-Write-Host "OPERATION: Identify Duplicates and Move to TARGETDIR (One Original Stays in SOURCEDIR)" -ForegroundColor White -BackgroundColor DarkRed;
-Write-Host "SOURCEDIR: " -NoNewline;
-Write-Host "'$sourceDir'" -ForegroundColor Yellow;
-Write-Host "TARGETDIR: " -NoNewline;
-Write-Host "'$targetDir'" -ForegroundColor Yellow;
-Write-Host "LOGFOLDER: " -NoNewline;
-Write-Host "'$logFolder'" -ForegroundColor Yellow;
-if ($makeOutput -eq "Y") {
-Write-Host "OUTPUTFILE: " -NoNewline;
-Write-Host "'$outputFile'" -ForegroundColor Yellow;
-}
-Write-Host " "
-
-if ($makeOutput -eq "Y") {
-	CHECKOUTPUT
+if ($Script:MakeOutput) {
+	Write-Message -Preamble "OUTPUTFILE:" -Message "'$Script:LogFile'"
+	Write-Host " "
+	CHECKOUTPUT -LogFile $Script:LogFile -LogFolder $Script:LogFolder
 }
 
-$operationDescription = "SOURCEDIR: $sourceDir`n"
-HOLDONE
-
-$startFulltime = (Get-Date)
 Write-Host " "
-Write-Host "Operation " -NoNewLine
-Write-Host "GET-CHILDITEM" -ForegroundColor Yellow -NoNewLine
-Write-Host " started at: " -NoNewLine
-Write-Host "$startFulltime" -ForegroundColor Yellow
 
-$operationDescription = "Operation GET-CHILDITEM started at $startFullTime"
-HOLDONE
+$startFulltime = Get-Date
+Write-Host " "
+
+Write-Message -Preamble "Operation" -Message "GET-CHILDITEM" -NewLine $False -Log $True -LogFile $Script:LogFile
+Write-Message -Preamble " started at:" -Message "$startFulltime" -Log $True -LogFile $Script:LogFile 
 
 #Assess Folder Contents ==============================================================================
-
-$i = 1
-$groupNumber = 1
-
 [System.Collections.ArrayList]$MyFiles = @()
-($allFiles = Get-ChildItem -LiteralPath $sourceDir -File -Force -Recurse -ErrorAction SilentlyContinue | ? { ($_.Extension -notlike ".ps1") -and ($_.Extension -notlike ".bat") -and ($_.fullname -notlike "$targetDir*") -and ($_.FullName -notlike "*$coldStorage*") }) | % {
-	[void]$MyFiles.Add($_)
+$allFiles = Get-ChildItem -LiteralPath $sourceDir -File -Force -Recurse -ErrorAction SilentlyContinue
+$targetFiles = $allFiles | Where-Object { 
+	($_.Extension -notin $Script:SkipFileTypes) -and 
+	($_.fullname -notlike "$targetDir*") -and 
+	($_.FullName -notlike "*$coldStorage*")
+}
+
+$targetFiles | ForEach-Object {
+	$MyFiles += $_
 	Write-Progress -Activity "Assessing file load, please wait..." -PercentComplete -1 -Status $_.Name
 }
 
@@ -137,217 +65,166 @@ Write-Progress -Completed ' '
 
 $endTime = (Get-Date)
 Write-Host " "
-Write-Host "Operation completed at " -NoNewLine
-Write-Host $endTime -ForegroundColor Yellow
+Write-Message -Preamble "Operation completed at" -Message $endTime
 
 #Display Stats - All Files ==============================================================================
 
-$numFiles = ($allFiles | Measure-Object).count
-$displayNumber = ('{0:N0}' -f $numFiles)
 Write-Host " "
-Write-Host "Total Files Found:		" -NoNewLine
-Write-Host $displayNumber -ForegroundColor Yellow -NoNewLine
-Write-Host " files."
+Write-Message -Preamble "Total Files Found:      " -Message $MyFiles.Count -NewLine $false -LogFile $Script:LogFile -Log $True
+Write-Message -Message "files." -MessageColor "White" -Log $True -LogFile $Script:LogFile 
+
 Write-Host " "
 
-If ($numFiles -eq 0) {
-	Write-Host " "
-	Write-Host "No files found. Operation aborted." -ForegroundColor Yellow
-	$operationDescription = "`nNo files found. Operation aborted."
-	HOLDONE
+If ($MyFiles.Count -eq 0) {
+	Write-Message -Message "No files found. Operation aborted." -Log $True -LogFile $Script:LogFile
 	PAUSE
 	BREAK
 }
 
-$numBytes = ($allFiles | Measure-Object -Property Length -sum).sum
+$numBytes = ($MyFiles | Measure-Object -Property Length -sum).sum
+$displayBytes = ('{0:N0}' -f $numBytes)
+$displayKBytes = ([math]::Round(($numBytes / 1KB), 2)).ToString("N2");
+$displayMBytes = ([math]::Round(($numBytes / 1MB), 2)).ToString("N2");
+$displayGBytes = ([math]::Round(($numBytes / 1GB), 2)).ToString("N2");
+$displayTBytes = ([math]::Round(($numBytes / 1TB), 2)).ToString("N2");
 
-Write-Host "ALLFILES.SUMMARY:" -ForegroundColor Yellow -BackgroundColor DarkGreen;
-Write-Host "ALLFILES.SIZE:			" -NoNewLine
-$displayNumber = ('{0:N0}' -f $numBytes)
-Write-Host $displayNumber -ForegroundColor Yellow -NoNewLine
-Write-Host  " Bytes"
+Write-Message -Message "ALLFILES.SUMMARY" -BgColor "DarkGreen"
+Write-Message -Preamble "ALLFILES.SIZE          " -Message "$displayBytes" -NewLine $False
+Write-Message -Message " Bytes" -MessageColor "White"
 
-Write-Host "ALLFILES.SIZE.KB:		" -NoNewLine
-$displayNumber = ([math]::Round(($numBytes/1KB),2)).ToString("N2");
-Write-Host $displayNumber -ForegroundColor Yellow -NoNewLine
-Write-Host  " KB"
+Write-Message -Preamble "ALLFILES.SIZE.KB:      " -Message $displayKBytes -NewLine $False
+Write-Message -Message " KB" -MessageColor "White"
 
-Write-Host "ALLFILES.SIZE.MB:		" -NoNewLine
-$displayNumber = ([math]::Round(($numBytes/1MB),2)).ToString("N2");
-Write-Host $displayNumber -ForegroundColor Yellow -NoNewLine
-Write-Host  " MB"
+Write-Message -Preamble "ALLFILES.SIZE.MB:      " -Message $displayMBytes -NewLine $False
+Write-Message -Message " MB" -MessageColor "White"
 
-Write-Host "ALLFILES.SIZE.GB:		" -NoNewLine
-$displayNumber = ([math]::Round(($numBytes/1GB),2)).ToString("N2");
-Write-Host $displayNumber -ForegroundColor Yellow -NoNewLine
-Write-Host  " GB"
+Write-Message -Preamble "ALLFILES.SIZE.GB:      " -Message $displayGBytes -NewLine $False
+Write-Message -Message " GB" -MessageColor "White"
 
-Write-Host "ALLFILES.SIZE.TB:		" -NoNewLine
-$displayNumber = ([math]::Round(($numBytes/1TB),2)).ToString("N2");
-Write-Host $displayNumber -ForegroundColor Yellow -NoNewLine
-Write-Host  " TB"
+Write-Message -Preamble "ALLFILES.SIZE.TB:      " -Message $displayTBytes -NewLine $False
+Write-Message -Message " TB" -MessageColor "White"
 
 $analysisTime = $endTime - $startFullTime;
 $displayTime = $analysisTime.ToString("hh\:mm\:ss")
 
-$timePerFile = $analysisTime.TotalSeconds/$numFiles;
+$timePerFile = $analysisTime.TotalSeconds / $MyFiles.count;
 $ts = [timespan]::fromseconds($timePerFile)
 
-Write-Host "Time required for analysis:	" -NoNewLine
-Write-Host $displayTime -ForegroundColor Yellow 
-Write-Host "Time per file (SS):		" -NoNewLine
-Write-Host $timePerfile -ForegroundColor Yellow -NoNewLine
-Write-Host " seconds"
-Write-Host "Time per file (HH:MM:SS):	" -NoNewLine
-Write-Host $ts.ToString("hh\:mm\:ss") -ForegroundColor Yellow
-
-$operationDescription = "`nOperation GET-CHILDITEM completed at $endTime`nTotal files found: $displayNumber`nTime required for analysis:	$analysisTime`nTime per file (SS):		$timePerfile seconds`nTime per file (HH:MM:SS):	$ts`n"
-HOLDONE
+Write-Message -Preamble "Time required for analysis:     " -Message $displayTime -Log $True -LogFile $Script:LogFile 
+Write-Message -Preamble "Time per file (SS):        " -Message $timePerfile -NewLine $False -Log $True -LogFile $Script:LogFile 
+Write-Message -Message "seconds" -MessageColor "White" -Log $True -LogFile $Script:LogFile 
+Write-Message -Preamble "Time per file (HH:MM:SS):  " -Message $ts.ToString("hh\:mm\:ss") -Log $True -LogFile $Script:LogFile 
 
 #Identify Duplicates ==============================================================================
 
 $startTime = (Get-Date);
 Write-Host " "
-Write-Host "Duplicate file identification begun at " -NoNewLine
-Write-Host $startTime -ForegroundColor Yellow -NoNewLine
-Write-Host "."
+Write-Message -Preamble "Duplicate file identification begun at " -Message $startTime -NewLine $False 
+Write-Message -Message "." -MessageColor "White"
 
-$i = 0;
-$allFiles | Group-Object -Property Length | Where-Object {$_.Count -gt 1} | ForEach-Object { $_.Group | Get-FileHash | Group-Object -Property Hash | Where-Object {$_.Count -gt 1} | ForEach-Object {
+$DuplicateFiles = 0
+$groupNumber = 0
+$FileGroups = $MyFiles | Group-Object -Property Length | Where-Object { $_.Count -gt 1}
+ForEach($Group in $FileGroups) {
+	$HashGroups = $Group.Group | Get-FileHash | Group-Object -Property Hash | Where-Object { $_.Count -gt 1 }
+	ForEach($File in $HashGroups) {
+		$displayGroup = ('{0:N0}' -f $groupNumber);
+		$thisHash1 = $($File.Name);
 
-	$displayGroup = ('{0:N0}' -f $groupNumber);
-	$thisHash1 = $($_.Name);
-
-	$notMoved = $_.Group[0].Path;
-	$checkFile = Get-Item $notMoved
-	$fileSize = $checkFile.Length
-
-	if ($fileSize -lt 1KB) {
-		$displaySize = ('{0:N0}' -f $fileSize) + " Bytes"
-	}
-
-	if (($fileSize -ge 1KB) -and ($fileSize -lt 1MB)) {
-		$displaySize = ([math]::Round(($fileSize/1KB),2)).ToString("N2") + "KB"
-	}
-
-	if (($fileSize -ge 1MB) -and ($fileSize -lt 1GB)) {
-		$displaySize = ([math]::Round(($fileSize/1MB),2)).ToString("N2") + "MB"
-	}
-
-	if (($fileSize -ge 1GB) -and ($fileSize -lt 1TB)) {
-		$displaySize = ([math]::Round(($fileSize/1GB),2)).ToString("N2") + "GB"
-	}
-
-	if ($fileSize -ge 1TB) {
-		$displaySize = ([math]::Round(($fileSize/1TB),2)).ToString("N2") + "TB"
-	}
-
-	$operationDescription = "FILE_GROUP: $displayGroup // HASH: $($_.Name) // SIZE: $displaySize"
-	HOLDONE
-
-	Write-Host "=============================================================================================================================" -ForegroundColor Cyan
-	Write-Host "FILE_GROUP: " -ForegroundColor Yellow -BackgroundColor DarkGreen -NoNewLine;
-	Write-Host $displayGroup -ForegroundColor White -BackgroundColor DarkGreen -NoNewLine;
-	Write-Host " // HASH: " -ForegroundColor Yellow -BackgroundColor DarkGreen -NoNewLine;
-	Write-Host $thisHash1 -ForegroundColor White -BackgroundColor DarkGreen -NoNewLine;
-	Write-Host " // SIZE: " -ForegroundColor Yellow -BackgroundColor DarkGreen -NoNewLine;
-	Write-Host $fileSize -ForegroundColor White -BackgroundColor DarkGreen;
-
-	$_.Group | Select -ExpandProperty Path | ForEach-Object {
-		Write-Host $_ -ForegroundColor White;
-		$operationDescription = $_;
-		HOLDONE
-	}
-
-	$operationDescription = "`nFile to be preserved:`n$notMoved`n"
-	HOLDONE
-
-	Write-Host " "
-	Write-Host "File to be preserved:" -BackgroundColor DarkBlue -ForegroundColor White;
-	Write-Host $notMoved -ForegroundColor Yellow;
-	Write-Host " ";
-	Write-Host "All others will be moved to _DUPLICATES." -BackgroundColor DarkRed -ForegroundColor Yellow;
-	Write-Host " "
-#	PAUSE
-	$_.Group | ForEach-Object {
-		if ($_.Path -ne $notMoved) {
-			$relativePath = $_.Path.Substring($sourceDir.Length)
-			$nextName = Join-Path -Path $targetDir -ChildPath $relativePath
-			MOVEITEM
-			$i += 1;
+		$notMoved = $File.Group[0].Path;
+		$checkFile = Get-Item $notMoved
+		$displaySize = switch ($checkFile.Length) {
+			{ $_ -lt 1KB }
+				{ ('{0:N0}' -f $_) + " Bytes"; break }
+		    { $_ -lt 1MB } 
+				{ ([math]::Round(($_ / 1KB), 2)).ToString("N2") + "KB"; break }
+			{ $_ -lt 1GB}
+				{([math]::Round(($_ / 1MB), 2)).ToString("N2") + "MB"; break }
+			{ $_ -lt 1TB } 
+				{([math]::Round(($_ / 1GB), 2)).ToString("N2") + "GB"; break}
+			{ $_ -ge 1TB }
+				{ ([math]::Round(($_ / 1TB), 2)).ToString("N2") + "TB"; break}
 		}
-	}
-	Write-Host "`nEnd of Group $displayGroup" -ForegroundColor  Green
-	$groupNumber++
+		
+
+		Write-Host "=============================================================================================================================" -ForegroundColor Cyan
+		Write-Message -Preamble "FILE_GROUP" -PreambleColor "Yellow" -Message $displayGroup -MessageColor White -NewLine $False -BGColor "DarkGreen" 
+		Write-Message -Preamble " // HASH:" -PreambleColor "Yellow" -Message $thisHash1 -MessageColor White -NewLine $False
+		Write-Message -Preamble " // SIZE:" -PreambleColor "Yellow" -Message $displaySize -MessageColor White 
+
+		$File.Group | ForEach-Object {
+			Write-Message -Message $_.Path -MessageColor "White" -Log $True -LogFile $Script:LogFile
+		}
+
+		Write-Host " "
+		Write-Message -Message "File to be preserved:" -BGColor DarkBlue -MessageColor White -Log $True -LogFile $Script:LogFile
+		Write-Message -Message $notMoved -Log $True -LogFile $Script:LogFile
+
+		Write-Host " ";
+		Write-Message -Message "All others will be moved to _DUPLICATES." -BgColor DarkRed
+		Write-Host " "
+
+		$File.Group[1..($File.Group.count - 1)] | ForEach-Object {
+				$TargetPath = $_.Path.Substring($sourceDir.Length)
+				$TargetName = Join-Path -Path $Script:targetDir -ChildPath $TargetPath
+				MOVEITEM -Source $_ -Target $TargetName
+				$DuplicateFiles += 1;
+		}
+
+		Write-Message -Message "`nEnd of Group $displayGroup" -MessageColor Green
+		$groupNumber++
 	}
 }
 
-$displayNumber = ('{0:N0}' -f $i)
+$displayNumber = ('{0:N0}' -f $DuplicateFiles)
 
 $endTime = (Get-Date)
 Write-Host " "
-Write-Host "Operation completed at " -NoNewLine
-Write-Host $endTime -ForegroundColor Yellow
+Write-Message -Preamble "Operation completed at " -Message $endTime -Log $True -LogFile $Script:LogFile
 $duplicateTime = $endTime - $startTime;
 
 #Display Stats - Duplicate Files ==============================================================================
 
-$numFilesDuplicates = $i;
+$numFilesDuplicates = $DuplicateFiles;
 $displayNumber = ('{0:N0}' -f $numFilesDuplicates)
 
 Write-Host " "
-Write-Host "$displayNumber" -ForegroundColor Yellow -NoNewLine
-Write-Host " duplicate files identified and moved."
+Write-Message -Preamble "$displayNumber" -Message " duplicate files identified and moved." -MessageColor "White" -Log $True -LogFile $Script:LogFile
 
-$timePerDuplicate = $duplicateTime.TotalSeconds/$numFiles;
-$ts =  [timespan]::fromseconds($timePerDuplicate)
-
-Write-Host " "
-Write-Host "Time required for duplicate handling:	" -NoNewLine
-Write-Host $duplicateTime.ToString("hh\:mm\:ss") -ForegroundColor Yellow 
-Write-Host "Time per file (SS):			" -NoNewLine
-Write-Host $timePerDuplicate -ForegroundColor Yellow -NoNewLine
-Write-Host " seconds"
-Write-Host "Time per file (HH:MM:SS):		" -NoNewLine
-Write-Host $ts.ToString("hh\:mm\:ss") -ForegroundColor Yellow
-
-$displayTime1 = $duplicateTime.ToString('hh\:mm\:ss');
-$displayTime2 = $ts.ToString('hh\:mm\:ss');
-
-$operationDescription = "`nOperation IDENTIFY-DUPLICATES completed at $endTime`nTotal files found: $displayNumber`nTime required for analysis:	$displayTime1`nTime per file (SS):		$timePerDuplicate seconds`nTime per file (HH:MM:SS):	$displayTime2`n"
-HOLDONE
+$timePerDuplicate = $duplicateTime.TotalSeconds / $numFilesDuplicates;
+$ts = [timespan]::fromseconds($timePerDuplicate)
 
 Write-Host " "
-Write-Host "Clearing empty folders, please wait..."
+Write-Message -Preamble "Time required for duplicate handling: " -Message $duplicateTime.ToString("hh\:mm\:ss") -Log $True -LogFile $Script:LogFile
 
-while($empties=Get-ChildItem $sourceDir -recurse -Directory -Force -ErrorAction SilentlyContinue |
-	 Where{$_.GetFiles().Count -eq 0 -and $_.GetDirectories().Count -eq 0 }){ $empties | Remove-Item -Force -Verbose   
-	 }
+Write-Message -Preamble "Time per file (SS):                   " -Message $timePerDuplicate -NewLine $False -Log $True -LogFile $Script:LogFile
+Write-Message -Message " seconds" -MessageColor "White" -Log $True -LogFile $Script:LogFile
+
+Write-Message "Time per file (HH:MM:SS):        " -Message $ts.ToString("hh\:mm\:ss") -Log $True -LogFile $Script:LogFile
+
+Write-Host " "
+Write-Message -Message "Clearing empty folders, please wait..." -MessageColor "White"
+
+$Directories = Get-ChildItem $sourceDir -Recurse -Directory -Force -ErrorAction SilentlyContinue
+$Directories | Where-Object { $_.GetFiles().Count -eq 0 -and $_.GetDirectories().Count -eq 0 } | ForEach-Object {
+	$_ | Remove-Item -Force -Verbose
+}
 
 #Compile and Display Runtime ==============================================================================
 
 $endFulltime = (Get-Date)
-
-Write-Host " "
-Write-Host "All processes completed:	" -NoNewLine
-Write-Host $endFulltime -ForegroundColor Yellow
 $elapsedTime = $endFulltime - $startFulltime
-$operationDescription = "Total time elapsed: $($elapsedTime.Hours) hours $($elapsedTime.Minutes) minutes and $($elapsedTime.Seconds) seconds."
-Write-Host "Total time elapsed:		" -NoNewLine
-Write-Host "$($elapsedTime.Hours)" -ForegroundColor Yellow -NoNewLine
-Write-Host " hours " -NoNewLine
-Write-Host "$($elapsedTime.Minutes)" -ForegroundColor Yellow -NoNewLine
-Write-Host " minutes and " -NoNewLine
-Write-Host "$($elapsedTime.Seconds)" -ForegroundColor Yellow -NoNewLine
-Write-Host " seconds."
-
-$operationDescription = "`nAll processes completed at $endFullTime`nTotal time elapsed: $($elapsedTime.Hours) hours $($elapsedTime.Minutes) minutes and $($elapsedTime.Seconds) seconds."
-HOLDONE
+Write-Host " "
+Write-Message -Preamble "All processes completed:   " -Message $endFulltime -Log $True -LogFile $Script:LogFile
+Write-Message -Preamble "Total time elapsed:        " -Message "$($elapsedTime.Hours)" -NewLine $False -Log $True -LogFile $Script:LogFile
+Write-Message -Preamble " hours " -Message "$($elapsedTime.Minutes)" -NewLine $False -Log $True -LogFile $Script:LogFile
+Write-Message -Preamble " minutes and " -Message $($elapsedTime.Seconds) -NewLine $False -Log $True -LogFile $Script:LogFile
+Write-Message -Message " seconds." -MessageColor "White" -Log $True -LogFile $Script:LogFile
 
 #$thisScript = & { $myInvocation.ScriptName }
 #$thisScript | Remove-Item -Force -Verbose
 
 Write-Host " "
-Invoke-Item $outputFile
+Invoke-Item $Script:LogFile
 
 PAUSE
